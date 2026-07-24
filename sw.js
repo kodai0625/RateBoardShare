@@ -7,7 +7,7 @@
 
    更新のたびに CACHE の版番号を上げること。 */
 
-var CACHE  = "rateboard-haifu-v2";
+var CACHE  = "rateboard-haifu-v3";
 var PREFIX = "rateboard-haifu-";
 
 var ASSETS = [

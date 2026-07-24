@@ -3851,6 +3851,9 @@ details.about[open] > summary::before{content:"− "}
 
   var KEY = "gaika-haifu-v1";
   var RATE_KEY = "gaika-rates-v2";
+  /* カード・両替所データの外部ソース。ここを1回更新すれば全アプリに反映される。 */
+  var DATA_URL = "https://kodai0625.github.io/Application/data.json";
+  var DATA_KEY = "gaika-data-v1";
 
   function load(){
     try{
@@ -3910,6 +3913,31 @@ details.about[open] > summary::before{content:"− "}
 
   /* ── レート取得 ── */
   var fetching = false;
+  /* カード・両替所データの取得。失敗しても埋め込みデータで動く。 */
+  function applyData(d){
+    if(d && Array.isArray(d.cardDb) && d.cardDb.length){
+      CARD_DB = d.cardDb.filter(function(c){ return c && c.name && BRANDS[c.brand]; });
+    }
+    if(d && Array.isArray(d.shops) && d.shops.length){
+      SHOPS = d.shops.filter(function(s){ return s && s.cur && s.city; });
+    }
+  }
+  function loadDataCache(){
+    try{ var d = JSON.parse(localStorage.getItem(DATA_KEY) || "null"); if(d) applyData(d); }catch(e){}
+  }
+  function fetchData(){
+    if(!("fetch" in window) || location.protocol === "file:") return;
+    fetch(DATA_URL, {cache:"no-store"})
+      .then(function(r){ if(!r.ok) throw 0; return r.json(); })
+      .then(function(d){
+        if(!d || !Array.isArray(d.cardDb)) throw 0;
+        applyData(d);
+        try{ localStorage.setItem(DATA_KEY, JSON.stringify(d)); }catch(e){}
+        render();
+      })
+      .catch(function(){});
+  }
+
   function fetchRates(manual){
     if(fetching) return;
     fetching = true;
@@ -4040,7 +4068,23 @@ details.about[open] > summary::before{content:"− "}
   /* built-in は設定欄で上書きできる。追加カードは自分の値をそのまま使う。 */
   function baseFee(c){ return (c.id in S.fees) ? S.fees[c.id] : c.fee; }
   function cardPt(c){  return (c.id in S.pts)  ? S.pts[c.id]  : c.pt;  }
-  function activeCards(){ return CARDS.concat(S.extraCards); }
+  /* 名前でカードDBを引く */
+  function cardByName(name){
+    for(var i=0;i<CARD_DB.length;i++){ if(CARD_DB[i].name === name) return CARD_DB[i]; }
+    return null;
+  }
+  /* 追加済みカードは、参照先がDBに在れば最新の手数料・還元率で置き換える。
+     こうすると data.json を更新するだけで、既に登録済みのカードも自動で新しくなる。
+     手入力カード（ref無し）や、DBから消えたカードは登録時の値のまま。 */
+  function liveCard(c){
+    if(c.ref){
+      var db = cardByName(c.ref);
+      if(db) return {id:c.id, extra:true, ref:c.ref, name:db.name, brand:db.brand,
+                     fee:db.fee, pt:db.pt, ptName:db.ptName || "", note:db.note || ""};
+    }
+    return c;
+  }
+  function activeCards(){ return CARDS.concat(S.extraCards.map(liveCard)); }
 
   function effFee(c){
     var f = baseFee(c);
@@ -4444,7 +4488,7 @@ details.about[open] > summary::before{content:"− "}
   function addCard(dbCard){
     var uid = "x" + Date.now().toString(36) + Math.floor(Math.random() * 1000);
     S.extraCards.push({
-      id:uid, extra:true,
+      id:uid, extra:true, ref:dbCard.ref || dbCard.name,
       name:dbCard.name, brand:dbCard.brand,
       fee:dbCard.fee, pt:dbCard.pt,
       ptName:dbCard.ptName || "", note:dbCard.note || ""
@@ -5051,10 +5095,12 @@ details.about[open] > summary::before{content:"− "}
   })();
 
   load();
+  loadDataCache();
   $("amount").value = String(S.amount);
   $("jpyAmount").value = String(S.jpyAmount);
   render();
   fetchRates(false);
+  fetchData();
 })();
 </script>
 
